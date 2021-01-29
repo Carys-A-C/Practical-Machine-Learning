@@ -164,7 +164,7 @@ c1$table
 
 
 
-Folllowing this I performed a gradient boosting model using again all 52 variables.
+Folllowing this I performed a gradient boosting model using again all 52 variables. Again I think a tree based model is going to perform best and I was curious to see if it would be better
 ```{r bag}
 set.seed(1784)
 mdl2 <- train(classe ~., training3, method = "gbm", verbose = FALSE)
