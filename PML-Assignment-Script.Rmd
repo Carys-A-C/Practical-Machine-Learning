@@ -23,6 +23,16 @@ This dataset contains measurements from the accelerometers on the belt, arm, for
 * D: Lowering the dumbbell only halfway
 * E: Swaying their hips forwards
 
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
 This report briefly summarizes the approaches taken in order to understand, explore and simplify the dataset as well as the models fitted. It fits both random forest and gradient boosting models, cross-validates on a test set, and performs the final validation on the test set provided. The final model used was a random forest model with close to 99% accuracy.
 
 
