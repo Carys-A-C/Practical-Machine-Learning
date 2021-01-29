@@ -1,0 +1,201 @@
+---
+title: "Predicting Class from Accelerometer Data"
+author: "Carys Croft"
+date: '2021-01-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+#### Objective
+
+Using machine learning, create a model to predict the manner in which a subject performs an exercise. 
+
+This report contains some exploratory data analysis of the training set, building two models and cross validation of the models.
+
+This dataset contains measurements from the accelerometers on the belt, arm, forearm and dumbbell of 6 different participants. Each participant performed the exercise 5 different ways:
+
+* A: Correctly
+* B: Throwing their elbows forwards
+* C: Lifting the dumbbell only halfway
+* D: Lowering the dumbbell only halfway
+* E: Swaying their hips forwards
+
+This report briefly summarizes the approaches taken in order to understand, explore and simplify the dataset as well as the models fitted. It fits both random forest and gradient boosting models, cross-validates on a test set, and performs the final validation on the test set provided. The final model used was a random forest model with close to 99% accuracy.
+
+
+#### Data Exploration
+
+The data was first loaded into R. Any data marked as "NA", empty strings (""), and the Microsoft Excel expression "#DIV/0!" (indicating an infinite value, or divisiion by zero) were all set to be NA. The seed was set to 22100 for reproducibility.
+
+As this is an assignment and in the interests of time and sanity I will be doing a simple training vs. test set cross validation. I would ideally in real life probably do a more extensive cross validation (maybe k-folds) but I'm working on my laptop and only have so much patience and computing power (and I have a feeling random forests or bagging are going to give me the best prediction, but they do tend to take forever).
+
+```{r libraries, message = FALSE, results = "hide"}
+library(caret)
+library(tidyverse)
+library(factoextra)
+library(corrplot)
+library(reshape2)
+library(ggpubr)
+library(randomForest)
+```
+
+The data was read in and split into two separate dataframes randomly, 70% training and 30% test.
+```{r read-and-split}
+
+dat <- read.csv("pml-training.csv", na.strings = c("NA", "", "#DIV/0!"), row.names = 1)
+set.seed(36362)
+
+classe <- dat$classe
+
+datpart <- createDataPartition(classe, p = 0.7, list = FALSE)
+
+training <- dat[datpart,]
+testing <- dat[-datpart,]
+```
+
+
+I then looked at the structure and the columns of the dataset (truncated for display). The first 6 variables appear to be aimed at identification of the subject (they refer to the user's name, the time they did the exercise, etc.). I very specifically don't want to use this as my aim is to predict based on the movement, and including the name (as you will see later) would make this useless for any new subjects. The ID columns I put in their own dataframe and includes all this information as well as the class variable. I then remove any variables with close to zero variance, and any columns with NAs, bringing the potential number of variables down to 52 from the original 159.
+```{r IDs}
+str(training, list.len = 10)
+table(training$classe)
+
+ID_training <- training[,c(1:6, ncol(training))]
+
+NZV <- nearZeroVar(training)
+
+training2 <- training[,-c(1:4, 6, NZV, ncol(training))]
+
+ISNA <- is.na(colSums(training2))
+
+
+training3 <- training2[,which(ISNA == FALSE)]
+training3$classe <- classe[datpart]
+```
+
+With the remaining variables, I made some plots to look at how they interact with each other and with the classe variable. First I plotted the density of the differing observations for all of the different classes to see how the distributions look for all of the different variables and see if there are any obvious differences. The figure is large however we can clearly see that class A has some differing distributions in a number of the variables, including some with large peaks compared to those of the other classes. This is true for the other classes too, the distributions vary. For example "E", which refers to throwing hips forward, has a different distribution of many of the variables detected by the belt accelerometer.
+```{r exploration-density, fig.width = 40, fig.height = 40}
+melt.train <- cbind(user = ID_training$user_name, classe = ID_training$classe, training3) %>% 
+    melt(id.vars = c("user", "classe"))
+
+
+ggplot(melt.train, aes(x = value, colour = classe)) + 
+    geom_density(lwd = 2) + facet_wrap(~variable, scales = "free", ncol = 6) + theme_bw() +
+    theme(strip.text = element_text(size = 16))
+```
+
+I then performed a correlation matrix to see how the variables correlate with each other.
+```{r corr, fig.height = 15, fig.width = 15}
+cor.1 <- cor(training3[,-ncol(training3)])
+
+corrplot(cor.1, type = "upper", order = "hclust", tl.cex = 0.8)
+```
+
+
+Next I performed a PCA on the unscaled data and looked at how they distribute according to the user and the type of exercise performed. They don't cluster clearly separately by either class or by user name. The variables that contribute the most to the dimensions can also be seen.
+```{r pca-1, fig.width = 20, fig.height = 5}
+prin.comp.1 <- prcomp(training3[,-ncol(training3)])
+
+f1 <- fviz_pca_ind(prin.comp.1, 
+                   geom = "point", habillage = ID_training$classe, 
+                   addEllipses = TRUE,
+                   palette = "jco",
+                   axes = 1:2)
+
+f2 <- fviz_pca_ind(prin.comp.1,
+                   geom = "point", habillage = ID_training$user_name,
+                   addEllipses = TRUE,
+                   palette = "jco",
+                   axes = 1:2)
+
+f3 <- fviz_contrib(prin.comp.1, choice = "var", axes = 1:2)
+
+ggarrange(f1, f2, f3, nrow = 1)
+```
+
+
+Interestingly when the same is performed on scaled data, the data divides clearly into clusters but primarily based on the user however, not based on the class. The structure of this PCA plot and the way it clusters gives me the impression that pca transformation may not be the most helpful. In the future one idea might be to find 
+```{r pca-2, fig.width = 20, fig.height = 5}
+prin.comp.2 <- prcomp(training3[,-ncol(training3)], scale = TRUE, center = TRUE)
+
+f4 <- fviz_pca_ind(prin.comp.2, 
+                   geom = "point", habillage = ID_training$classe, 
+                   addEllipses = TRUE,
+                   palette = "jco",
+                   axes = 1:2)
+
+f5 <- fviz_pca_ind(prin.comp.2,
+                   geom = "point", habillage = ID_training$user_name,
+                   addEllipses = TRUE,
+                   palette = "jco",
+                   axes = 1:2)
+
+f6 <- fviz_contrib(prin.comp.2, choice = "var", axes = 1:2)
+
+ggarrange(f4, f5, f6, nrow = 1)
+```
+
+
+#### Modelling
+
+The first model tested is random forests - these tend to perform but can be quite slow. It is built with 500 trees using the 52 variables from the training set.
+```{r rf}
+set.seed(1255)
+mdl1 <- train(classe ~ ., training3, method = "rf")
+```
+
+The results of the model build can be seen below. The best tune is `r mdl1$bestTune$mtry` and has an accuracy of almost 99% in the training set.
+```{r rf-result}
+mdl1$bestTune
+mdl1$results
+```
+
+The confusion Matrix for this model is displayed below, and the confusion matrix for the testing data. It is very similar to the above in train accuracy, around 99%. (It is strangely a little higher... There may be some overfitting here but they are very close).
+```{r pred1}
+pred1 <- predict(mdl1, testing)
+
+c1 <- confusionMatrix(pred1, as.factor(testing$classe))
+
+c1$overall
+c1$table
+```
+
+
+
+Folllowing this I performed a gradient boosting model using again all 52 variables.
+```{r bag}
+set.seed(1784)
+mdl2 <- train(classe ~., training3, method = "gbm", verbose = FALSE)
+```
+
+The accuracy is slightly lower (95.8%) than random forests for the training set.
+```{r bag-result}
+mdl2$results
+mdl2$bestTune
+```
+
+It is very similar on the test set (95.57%) after having made a confusion matrix.
+```{r pred2}
+pred2 <- predict(mdl2, testing)
+
+c2 <- confusionMatrix(pred2, as.factor(testing$classe))
+
+c2$overall
+c2$table
+```
+
+
+#### Final Validation
+
+Finally we read in the 20 samples from the testing and test them on the random forest model (selected because it is the best one according to accuracy). Out of curiosity I also ran it on the boosted model and see that they mostly agree with the exception of the first observation. For the final testing though I will be using the random forest model, as although I think it is slightly overfit, it is still a better model.
+```{r validation}
+dat2 <- read.csv("pml-testing.csv", na.strings = c("NA", "", "#DIV/0!"), row.names = 1)
+
+pred.Final <- predict(mdl1, dat2)
+pred.Final
+
+pred.Final2 <- predict(mdl2, dat2)
+pred.Final2
+```
