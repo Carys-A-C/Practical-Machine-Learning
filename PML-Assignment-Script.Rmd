@@ -162,7 +162,7 @@ mdl1$bestTune
 mdl1$results
 ```
 
-The confusion Matrix for this model is displayed below, and the confusion matrix for the testing data. It is very similar to the above in train accuracy, around 99%. (It is strangely a little higher... There may be some overfitting here but they are very close).
+The confusion Matrix for this model is displayed below, and the confusion matrix for the testing data. It is very similar to the above in train accuracy, around 99%. (It is strangely a little higher... There may be some overfitting here but they are very close). Error is less than 1% based on cross validation.
 ```{r pred1}
 pred1 <- predict(mdl1, testing)
 
@@ -174,7 +174,7 @@ c1$table
 
 
 
-Folllowing this I performed a gradient boosting model using again all 52 variables. Again I think a tree based model is going to perform best and I was curious to see if it would be better
+Folllowing this I performed a gradient boosting model using again all 52 variables. Again I think a tree based model is going to perform best and I was curious to see if it would be better.
 ```{r bag}
 set.seed(1784)
 mdl2 <- train(classe ~., training3, method = "gbm", verbose = FALSE)
@@ -186,7 +186,7 @@ mdl2$results
 mdl2$bestTune
 ```
 
-It is very similar on the test set (95.57%) after having made a confusion matrix.
+It is very similar on the test set (95.57%) after having made a confusion matrix. - Error is less than 5% based on cross validation.
 ```{r pred2}
 pred2 <- predict(mdl2, testing)
 
